@@ -1,9 +1,10 @@
 import os
 import openai
-from flask import Flask, request
+from flask import Flask, request, send_file
 from telebot import TeleBot, types
 from pydub import AudioSegment
 import logging
+import ffmpeg
 
 # Set up logging
 logging.basicConfig(
@@ -24,6 +25,19 @@ bot = TeleBot(BOT_TOKEN, threaded=False)
 bot.remove_webhook()
 bot.set_webhook(url=URL)
 
+def compress_audio(input_path, output_path):
+    """Compress audio file using ffmpeg."""
+    try:
+        (
+            ffmpeg
+            .input(input_path)
+            .output(output_path, ac=1, codec='libopus', audio_bitrate='12k', application='voip')
+            .run(overwrite_output=True)
+        )
+        return output_path
+    except Exception as e:
+        logger.error(f"Error compressing audio: {e}")
+        return None
 
 def transcribe_audio(file_path):
     """Transcribe audio file using OpenAI's Whisper model."""
@@ -41,7 +55,6 @@ def transcribe_audio(file_path):
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
         return None
-
 
 def generate_report(transcription):
     """Generate a report based on the transcription using GPT-3.5."""
@@ -63,6 +76,10 @@ def generate_report(transcription):
         logger.error(f"Error generating report: {e}")
         return None
 
+def send_long_message(chat_id, message):
+    """Send long message in chunks."""
+    for i in range(0, len(message), 4095):
+        bot.send_message(chat_id, message[i:i+4095])
 
 @bot.message_handler(commands=["start", "restart"])
 def start(message):
@@ -70,53 +87,50 @@ def start(message):
     message_to_send = 'Hi! Send me an audio file and I will transcribe it and generate a report.'
     bot.send_message(message.chat.id, message_to_send, parse_mode='Markdown')
 
-
-
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
     """Handle audio files sent as documents."""
-    print('received document')
-
     document = message.document
     if document.mime_type.startswith('audio/'):
         try:
             file_info = bot.get_file(document.file_id)
             file_extension = file_info.file_path.split('.')[-1]
-            file_path = f"downloads/{document.file_unique_id}.{file_extension}"
+            input_path = f"downloads/{document.file_unique_id}.{file_extension}"
 
             downloaded_file = bot.download_file(file_info.file_path)
-            with open(file_path, 'wb') as new_file:
+            with open(input_path, 'wb') as new_file:
                 new_file.write(downloaded_file)
 
-            audio = AudioSegment.from_file(file_path)
-            wav_path = file_path.replace(file_extension, 'wav')
-            audio.export(wav_path, format='wav')
+            bot.reply_to(message, 'Please wait while we process the audio file')
 
-            transcription = transcribe_audio(wav_path)
-            if transcription:
-                report = generate_report(transcription)
-                output = transcription + "\n\n" + report
+            # Compress the audio file
+            output_path = os.path.join("downloads", "compressed_" + document.file_unique_id + ".ogg")
+            compressed_path = compress_audio(input_path, output_path)
+            if compressed_path:
+                transcription = transcribe_audio(compressed_path)
+                if transcription:
+                    report = generate_report(transcription)
+                    output = transcription + "\n\n" + report
 
-                if report:
-                    bot.reply_to(message, output)
+                    if report:
+                        send_long_message(message.chat.id, output)
+                    else:
+                        bot.reply_to(message, 'Failed to generate report.')
                 else:
-                    bot.reply_to(message, 'Failed to generate report.')
-            else:
-                bot.reply_to(message, 'Failed to transcribe audio.')
+                    bot.reply_to(message, 'Failed to transcribe audio.')
 
         except Exception as e:
             logger.error(f"Error handling audio document: {e}")
             bot.reply_to(message, 'An error occurred while processing your audio file.')
 
         finally:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            if os.path.exists(wav_path):
-                os.remove(wav_path)
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
 
     else:
         bot.reply_to(message, 'Please send an audio file.')
-
 
 @bot.message_handler(content_types=['audio', 'voice'])
 def handle_audio(message):
@@ -131,36 +145,38 @@ def handle_audio(message):
     try:
         file_info = bot.get_file(audio_file.file_id)
         file_extension = file_info.file_path.split('.')[-1]
-        file_path = f"downloads/{audio_file.file_unique_id}.{file_extension}"
+        input_path = f"downloads/{audio_file.file_unique_id}.{file_extension}"
 
         downloaded_file = bot.download_file(file_info.file_path)
-        with open(file_path, 'wb') as new_file:
+        with open(input_path, 'wb') as new_file:
             new_file.write(downloaded_file)
 
-        audio = AudioSegment.from_file(file_path)
-        wav_path = file_path.replace(file_extension, 'wav')
-        audio.export(wav_path, format='wav')
+        bot.reply_to(message, 'Please wait while we process the audio file')
+        # Compress the audio file
+        output_path = os.path.join("downloads", "compressed_" + audio_file.file_unique_id + ".ogg")
+        compressed_path = compress_audio(input_path, output_path)
+        if compressed_path:
+            transcription = transcribe_audio(compressed_path)
+            if transcription:
+                report = generate_report(transcription)
 
-        transcription = transcribe_audio(wav_path)
-        if transcription:
-            report = generate_report(transcription)
-            if report:
-                bot.reply_to(message, report)
+                output = transcription + '\n\n' + report
+                if report:
+                    send_long_message(message.chat.id, output)
+                else:
+                    bot.reply_to(message, 'Failed to generate report.')
             else:
-                bot.reply_to(message, 'Failed to generate report.')
-        else:
-            bot.reply_to(message, 'Failed to transcribe audio.')
+                bot.reply_to(message, 'Failed to transcribe audio.')
 
     except Exception as e:
         logger.error(f"Error handling audio file: {e}")
         bot.reply_to(message, 'An error occurred while processing your audio file or voice message.')
 
     finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        if os.path.exists(wav_path):
-            os.remove(wav_path)
-
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
 @app.route('/', methods=['POST'])
 def webhook():
@@ -168,7 +184,6 @@ def webhook():
     update = types.Update.de_json(request.data.decode('utf8'))
     bot.process_new_updates([update])
     return 'ok', 200
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)

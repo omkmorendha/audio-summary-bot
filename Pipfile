@@ -10,6 +10,7 @@ openai = "*"
 python-dotenv = "*"
 flask = "*"
 telebot = "*"
+ffmpeg-python = "*"
 
 [dev-packages]
 
