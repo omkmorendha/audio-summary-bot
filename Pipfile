@@ -11,6 +11,7 @@ python-dotenv = "*"
 flask = "*"
 telebot = "*"
 ffmpeg-python = "*"
+gunicorn = "*"
 
 [dev-packages]
 
