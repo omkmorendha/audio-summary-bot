@@ -199,7 +199,7 @@ def handle_audio(message):
             os.remove(output_path)
 
 
-@app.route("/", methods=["POST"])
+@app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
     """Webhook to handle incoming updates from Telegram."""
     update = types.Update.de_json(request.data.decode("utf8"))
