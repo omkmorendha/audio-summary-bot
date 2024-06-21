@@ -64,7 +64,7 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"Generate a detailed report based on the following transcription:\n\n{transcription}"
+        prompt = f"Turn this parent session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT. Based on the following transcription:\n\n{transcription}"
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -123,10 +123,9 @@ def handle_document(message):
                 transcription = transcribe_audio(compressed_path)
                 if transcription:
                     report = generate_report(transcription)
-                    output = transcription + "\n\n" + report
 
                     if report:
-                        send_long_message(message.chat.id, output)
+                        send_long_message(message.chat.id, report)
                     else:
                         bot.reply_to(message, "Failed to generate report.")
                 else:
@@ -176,9 +175,8 @@ def handle_audio(message):
             if transcription:
                 report = generate_report(transcription)
 
-                output = transcription + "\n\n" + report
                 if report:
-                    send_long_message(message.chat.id, output)
+                    send_long_message(message.chat.id, report)
                 else:
                     bot.reply_to(message, "Failed to generate report.")
             else:
