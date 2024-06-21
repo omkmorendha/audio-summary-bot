@@ -3,6 +3,7 @@ import openai
 from flask import Flask, request
 from telebot import TeleBot, types
 from pydub import AudioSegment
+import time
 import logging
 import ffmpeg
 
@@ -16,10 +17,12 @@ app = Flask(__name__)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 URL = os.environ.get("URL")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 bot = TeleBot(BOT_TOKEN, threaded=False)
-# bot.remove_webhook()
-bot.set_webhook(url=URL)
+bot.remove_webhook()
+time.sleep(1)
+bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
 
 
 def compress_audio(input_path, output_path):
