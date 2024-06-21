@@ -67,7 +67,7 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"Turn this parent session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT. Based on the following transcription:\n\n{transcription}"
+        prompt = f"Turn this patient session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT. Based on the following transcription:\n\n{transcription}"
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -92,7 +92,7 @@ def send_long_message(chat_id, message):
 def start(message):
     """Handle /start and /restart commands."""
     message_to_send = (
-        "Hi! Send me an audio file and I will transcribe it and generate a report."
+        "Hi! Send me an audio file and I will generate a written SOAP note in English."
     )
     bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
 
