@@ -20,9 +20,9 @@ URL = os.environ.get("URL")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 bot = TeleBot(BOT_TOKEN, threaded=False)
-bot.remove_webhook()
-time.sleep(1)
-bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
+# bot.remove_webhook()
+# time.sleep(1)
+# bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
 
 
 def compress_audio(input_path, output_path):
