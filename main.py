@@ -18,7 +18,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 URL = os.environ.get("URL")
 
 bot = TeleBot(BOT_TOKEN, threaded=False)
-bot.remove_webhook()
+# bot.remove_webhook()
 bot.set_webhook(url=URL)
 
 
