@@ -98,6 +98,9 @@ def start(message):
 def handle_document(message):
     """Handle audio files sent as documents."""
     document = message.document
+    input_path = None
+    output_path = None
+
     if document.mime_type.startswith("audio/"):
         try:
             file_info = bot.get_file(document.file_id)
@@ -105,6 +108,7 @@ def handle_document(message):
             input_path = f"downloads/{document.file_unique_id}.{file_extension}"
 
             downloaded_file = bot.download_file(file_info.file_path)
+            os.makedirs(os.path.dirname(input_path), exist_ok=True)
             with open(input_path, "wb") as new_file:
                 new_file.write(downloaded_file)
 
@@ -133,9 +137,9 @@ def handle_document(message):
             bot.reply_to(message, "An error occurred while processing your audio file.")
 
         finally:
-            if os.path.exists(input_path):
+            if input_path and os.path.exists(input_path):
                 os.remove(input_path)
-            if os.path.exists(output_path):
+            if output_path and os.path.exists(output_path):
                 os.remove(output_path)
 
     else:
