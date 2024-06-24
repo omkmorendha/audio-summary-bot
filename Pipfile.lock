@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "b6871d9e511b2b1bce1cbf832a386b6132c64033500b9d34e360037e758142f9"
+            "sha256": "0a744a859f15976f88ca547e9ea1d06f76bece7b82b43318bcc608e60bcb34f0"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -216,6 +216,12 @@
             "markers": "python_version >= '3.6'",
             "version": "==1.9.0"
         },
+        "envelopes": {
+            "hashes": [
+                "sha256:a4a02b4dc21467794d3a646f946d99a8c5b3311b2df8e211f96ca9e0b838e7e0"
+            ],
+            "version": "==0.4"
+        },
         "exceptiongroup": {
             "hashes": [
                 "sha256:5258b9ed329c5bbdd31a309f53cbfb0b155341807f6ff7606a1e801a891b29ad",
@@ -313,6 +319,22 @@
             ],
             "markers": "python_version >= '3.8'",
             "version": "==5.3.7"
+        },
+        "markdown": {
+            "hashes": [
+                "sha256:48f276f4d8cfb8ce6527c8f79e2ee29708508bf4d40aa410fbc3b4ee832c850f",
+                "sha256:ed4f41f6daecbeeb96e576ce414c41d2d876daa9a16cb35fa8ed8c2ddfad0224"
+            ],
+            "markers": "python_version >= '3.8'",
+            "version": "==3.6"
+        },
+        "markdownmail": {
+            "hashes": [
+                "sha256:7735145ab54d9692ba5b0de8d67dd20f044d3689c6f166d7cace2a2427742e4c",
+                "sha256:ee3e9335647581eb7152b818d387baa499a86288870ad3f9097bb575bb794061"
+            ],
+            "index": "pypi",
+            "version": "==0.11.0"
         },
         "markupsafe": {
             "hashes": [
