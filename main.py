@@ -3,6 +3,9 @@ import openai
 from flask import Flask, request
 from telebot import TeleBot, types
 from pydub import AudioSegment
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import time
 import logging
 import ffmpeg
@@ -19,10 +22,33 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 URL = os.environ.get("URL")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
-bot = TeleBot(BOT_TOKEN, threaded=False)
-# bot.remove_webhook()
-# time.sleep(1)
-# bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
+bot = TeleBot(BOT_TOKEN, threaded=True)
+bot.remove_webhook()
+time.sleep(1)
+bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
+
+
+def send_email(subject, message, to_email):
+    smtp_server = os.environ.get("SMTP_SERVER")
+    smtp_port = int(os.environ.get("SMTP_PORT"))
+    smtp_login = os.environ.get("SMTP_LOGIN")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_login
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    html_message = message
+    msg.attach(MIMEText(html_message, "html"))
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.login(smtp_login, smtp_password)
+            server.sendmail(smtp_login, to_email, msg.as_string())
+
+    except Exception as e:
+        print("Error: ", e)
 
 
 def compress_audio(input_path, output_path):
@@ -127,6 +153,9 @@ def handle_document(message):
                 if transcription:
                     report = generate_report(transcription)
 
+                    subject = "Your SOAP report"
+                    email = "om.morendha@cognyx.ai"
+                    send_email(subject, report, email)
                     if report:
                         send_long_message(message.chat.id, report)
                     else:
@@ -180,6 +209,10 @@ def handle_audio(message):
 
                 if report:
                     send_long_message(message.chat.id, report)
+
+                    subject = "Your SOAP report"
+                    email = "om.morendha@cognyx.ai"
+                    send_email(subject, report, email)
                 else:
                     bot.reply_to(message, "Failed to generate report.")
             else:
