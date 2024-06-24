@@ -112,13 +112,9 @@ def handle_document(message):
     if document.mime_type.startswith("audio/"):
         file_info = bot.get_file(document.file_id)
         input_path = f"downloads/{document.file_unique_id}.{file_info.file_path.split('.')[-1]}"
-        os.makedirs(os.path.dirname(input_path), exist_ok=True)
-        downloaded_file = bot.download_file(file_info.file_path)
-        with open(input_path, "wb") as new_file:
-            new_file.write(downloaded_file)
 
         bot.reply_to(message, "Please wait while we process the audio file")
-        process_audio.delay(input_path, message.chat.id)
+        process_audio.delay(input_path, message.chat.id, file_info)
     else:
         bot.reply_to(message, "Please send an audio file.")
 
@@ -132,16 +128,17 @@ def handle_audio(message):
 
     file_info = bot.get_file(audio_file.file_id)
     input_path = f"downloads/{audio_file.file_unique_id}.{file_info.file_path.split('.')[-1]}"
+
+    bot.reply_to(message, "Please wait while we process the audio file")
+    process_audio.delay(input_path, message.chat.id, file_info)
+
+@celery.task
+def process_audio(input_path, chat_id, file_info):
     os.makedirs(os.path.dirname(input_path), exist_ok=True)
     downloaded_file = bot.download_file(file_info.file_path)
     with open(input_path, "wb") as new_file:
         new_file.write(downloaded_file)
 
-    bot.reply_to(message, "Please wait while we process the audio file")
-    process_audio.delay(input_path, message.chat.id)
-
-@celery.task
-def process_audio(input_path, chat_id):
     output_path = os.path.join("downloads", "compressed_" + os.path.basename(input_path))
     compressed_path = compress_audio(input_path, output_path)
     if compressed_path:
