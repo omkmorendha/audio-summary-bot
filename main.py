@@ -97,48 +97,41 @@ def send_long_message(chat_id, message):
     for i in range(0, len(message), 4095):
         bot.send_message(chat_id, message[i : i + 4095])
 
-@bot.message_handler(commands=["start", "restart"])
-def start(message):
-    """Handle /start and /restart commands."""
-    message_to_send = (
-        "Hi! Send me an audio file and I will generate a written SOAP note in English."
-    )
-    bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
-
-@bot.message_handler(content_types=["document"])
-def handle_document(message):
-    """Handle audio files sent as documents."""
-    document = message.document
-    if document.mime_type.startswith("audio/"):
-        file_info = bot.get_file(document.file_id)
-        input_path = f"downloads/{document.file_unique_id}.{file_info.file_path.split('.')[-1]}"
-
-        bot.reply_to(message, "Please wait while we process the audio file")
-        process_audio.delay(input_path, message.chat.id, file_info)
+@bot.message_handler(content_types=["document", "audio", "voice"])
+def handle_files(message):
+    """Handle audio files sent as documents or directly."""
+    
+    if message.content_type == "document":
+        document = message.document
+        if document.mime_type.startswith("audio/"):
+            file_info = bot.get_file(document.file_id)
+            file_path = f"downloads/{document.file_unique_id}.{file_info.file_path.split('.')[-1]}"
+            bot.reply_to(message, "Please wait while we process the file")
+            download_and_process.delay(file_info.file_path, file_path, message.chat.id)
+        else:
+            bot.reply_to(message, "Please send an audio file.")
+    elif message.content_type in ["audio", "voice"]:
+        audio_file = message.audio or message.voice
+        file_info = bot.get_file(audio_file.file_id)
+        file_path = f"downloads/{audio_file.file_unique_id}.{file_info.file_path.split('.')[-1]}"
+        bot.reply_to(message, "Please wait while we process the file")
+        download_and_process.delay(file_info.file_path, file_path, message.chat.id)
     else:
-        bot.reply_to(message, "Please send an audio file.")
-
-@bot.message_handler(content_types=["audio", "voice"])
-def handle_audio(message):
-    """Handle audio file uploads."""
-    audio_file = message.audio or message.voice
-    if not audio_file:
-        bot.reply_to(message, "Please send a valid audio file or voice message.")
-        return
-
-    file_info = bot.get_file(audio_file.file_id)
-    input_path = f"downloads/{audio_file.file_unique_id}.{file_info.file_path.split('.')[-1]}"
-
-    bot.reply_to(message, "Please wait while we process the audio file")
-    process_audio.delay(input_path, message.chat.id, file_info)
+        bot.reply_to(message, "Unsupported file format.")
 
 @celery.task
-def process_audio(input_path, chat_id, file_info):
-    os.makedirs(os.path.dirname(input_path), exist_ok=True)
-    downloaded_file = bot.download_file(file_info.file_path)
-    with open(input_path, "wb") as new_file:
+def download_and_process(remote_path, local_path, chat_id):
+    """Download file from Telegram and process."""
+    downloaded_file = bot.download_file(remote_path)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    with open(local_path, "wb") as new_file:
         new_file.write(downloaded_file)
 
+    process_audio.delay(local_path, chat_id)
+
+@celery.task
+def process_audio(input_path, chat_id):
+    """Process audio file."""
     output_path = os.path.join("downloads", "compressed_" + os.path.basename(input_path))
     compressed_path = compress_audio(input_path, output_path)
     if compressed_path:
@@ -155,6 +148,14 @@ def process_audio(input_path, chat_id, file_info):
         bot.send_message(chat_id, "Failed to compress audio.")
     os.remove(input_path)
     os.remove(output_path)
+
+@bot.message_handler(commands=["start", "restart"])
+def start(message):
+    """Handle /start and /restart commands."""
+    message_to_send = (
+        "Hi! Send me an audio file and I will generate a written SOAP note in English."
+    )
+    bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
