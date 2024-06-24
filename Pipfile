@@ -12,6 +12,8 @@ flask = "*"
 telebot = "*"
 ffmpeg-python = "*"
 gunicorn = "*"
+redis = "*"
+celery = "*"
 
 [dev-packages]
 
