@@ -15,6 +15,7 @@ gunicorn = "*"
 redis = "*"
 celery = "*"
 markdownmail = "*"
+pytz = "*"
 
 [dev-packages]
 
