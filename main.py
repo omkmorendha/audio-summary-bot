@@ -120,7 +120,7 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"Turn this patient session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT and do not mention this replacement. Based on the following transcription:\n\n{transcription}"
+        prompt = f"Turn this patient session summary transcript into a written SOAP note in English. Strictly eeplace the Client's name with the word CLIENT for privacy. Based on the following transcription:\n\n{transcription}"
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
