@@ -44,7 +44,6 @@ bot = TeleBot(BOT_TOKEN, threaded=True)
 
 # Connect to Redis
 redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
 
 
 def send_email(subject, message, to_email):
@@ -210,7 +209,9 @@ def process_audio(input_path, chat_id):
 def prompt_for_email_option(chat_id, report):
     """Prompt the user for email options."""
     report_id = str(uuid.uuid4())
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     redis_client.set(report_id, report)
+    redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Send Immediately", callback_data=f"send_immediately:{report_id}"))
@@ -221,6 +222,7 @@ def prompt_for_email_option(chat_id, report):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("send_immediately") or call.data.startswith("custom_subject"))
 def handle_email_option(call):
     """Handle email option selection."""
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     action, report_id = call.data.split(":", 1)
     report = redis_client.get(report_id)
 
@@ -240,15 +242,18 @@ def handle_email_option(call):
                 send_email(subject, report, email)
         
         redis_client.delete(report_id)
+        redis_client.close()
         bot.send_message(call.message.chat.id, "Email sent successfully.")
 
     elif action == "custom_subject":
         bot.send_message(call.message.chat.id, "Please provide the custom subject for the email:")
+        redis_client.close()
         bot.register_next_step_handler(call.message, get_custom_subject, report_id)
 
 
 def get_custom_subject(message, report_id):
     """Get the custom subject from the user and send the email."""
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     current_datetime = datetime.datetime.now(tz=pytz.utc)
     formatted_date = current_datetime.strftime("%d/%m/%Y")
     subject = f"{message.text} {formatted_date}"
@@ -256,6 +261,7 @@ def get_custom_subject(message, report_id):
 
     if not report:
         bot.send_message(message.chat.id, "Report not found.")
+        redis_client.close()
         return
 
     if TO_EMAIL:
@@ -264,6 +270,7 @@ def get_custom_subject(message, report_id):
     
     redis_client.delete(report_id)
     bot.send_message(message.chat.id, "Email sent successfully.")
+    redis_client.close()
 
 
 @bot.message_handler(commands=["start", "restart"])
