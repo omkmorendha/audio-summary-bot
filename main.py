@@ -12,6 +12,8 @@ import datetime
 import pytz
 import ast
 from markdownmail import MarkdownMail
+import uuid
+import redis
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -40,6 +42,10 @@ bot = TeleBot(BOT_TOKEN, threaded=True)
 # time.sleep(1)
 # bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
 
+# Connect to Redis
+redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+
 
 def send_email(subject, message, to_email):
     smtp_server = os.environ.get("SMTP_SERVER")
@@ -59,6 +65,7 @@ def send_email(subject, message, to_email):
 
     except Exception as e:
         print("Error sending email:", e)
+
 
 def compress_audio(input_path, output_path):
     """Compress audio file using ffmpeg."""
@@ -113,7 +120,7 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"Turn this patient session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT. Based on the following transcription:\n\n{transcription}"
+        prompt = f"Turn this patient session summary transcript into a written SOAP note in English. Replace the Client's name with the word CLIENT and do not mention this replacement. Based on the following transcription:\n\n{transcription}"
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -183,16 +190,7 @@ def process_audio(input_path, chat_id):
                 report = generate_report(transcription)
                 if report:
                     send_long_message(chat_id, report)
-
-                    if TO_EMAIL:
-                        current_datetime = datetime.datetime.now(tz=pytz.utc)
-                        formatted_date = current_datetime.strftime("%d/%m/%Y")
-                        formatted_time = current_datetime.strftime("%I:%M %p")
-
-                        subject = f"NOTES {formatted_date} {formatted_time}"
-                        
-                        for email in TO_EMAIL:
-                            send_email(subject, report, email)
+                    prompt_for_email_option(chat_id, report)
                 else:
                     bot.send_message(chat_id, "Failed to generate report.")
             else:
@@ -207,6 +205,65 @@ def process_audio(input_path, chat_id):
             os.remove(input_path)
         if output_path:
             os.remove(output_path)
+
+
+def prompt_for_email_option(chat_id, report):
+    """Prompt the user for email options."""
+    report_id = str(uuid.uuid4())
+    redis_client.set(report_id, report)
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("Send Immediately", callback_data=f"send_immediately:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Custom Subject", callback_data=f"custom_subject:{report_id}"))
+    bot.send_message(chat_id, "Do you want to send the email immediately or provide a custom subject?", reply_markup=markup)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("send_immediately") or call.data.startswith("custom_subject"))
+def handle_email_option(call):
+    """Handle email option selection."""
+    action, report_id = call.data.split(":", 1)
+    report = redis_client.get(report_id)
+
+    if not report:
+        bot.send_message(call.message.chat.id, "Report not found.")
+        return
+
+    if action == "send_immediately":
+        if TO_EMAIL:
+            current_datetime = datetime.datetime.now(tz=pytz.utc)
+            formatted_date = current_datetime.strftime("%d/%m/%Y")
+            formatted_time = current_datetime.strftime("%I:%M %p")
+
+            subject = f"NOTES {formatted_date}"
+            
+            for email in TO_EMAIL:
+                send_email(subject, report, email)
+        
+        redis_client.delete(report_id)
+        bot.send_message(call.message.chat.id, "Email sent successfully.")
+
+    elif action == "custom_subject":
+        bot.send_message(call.message.chat.id, "Please provide the custom subject for the email:")
+        bot.register_next_step_handler(call.message, get_custom_subject, report_id)
+
+
+def get_custom_subject(message, report_id):
+    """Get the custom subject from the user and send the email."""
+    current_datetime = datetime.datetime.now(tz=pytz.utc)
+    formatted_date = current_datetime.strftime("%d/%m/%Y")
+    subject = f"{message.text} {formatted_date}"
+    report = redis_client.get(report_id)
+
+    if not report:
+        bot.send_message(message.chat.id, "Report not found.")
+        return
+
+    if TO_EMAIL:
+        for email in TO_EMAIL:
+            send_email(subject, report, email)
+    
+    redis_client.delete(report_id)
+    bot.send_message(message.chat.id, "Email sent successfully.")
 
 
 @bot.message_handler(commands=["start", "restart"])
