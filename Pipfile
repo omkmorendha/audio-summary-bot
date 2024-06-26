@@ -16,6 +16,7 @@ redis = "*"
 celery = "*"
 markdownmail = "*"
 pytz = "*"
+pyshorteners = "*"
 
 [dev-packages]
 

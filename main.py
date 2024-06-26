@@ -1,17 +1,18 @@
 import os
 import openai
+import pyshorteners
 from flask import Flask, request
 from telebot import TeleBot, types
+from telegram.constants import ParseMode
 from pydub import AudioSegment
+import urllib.parse
 import time
 import logging
 import ffmpeg
 from celery import Celery
-import smtplib
 import datetime
 import pytz
 import ast
-from markdownmail import MarkdownMail
 import uuid
 import redis
 
@@ -45,27 +46,6 @@ bot = TeleBot(BOT_TOKEN, threaded=True)
 # Connect to Redis
 redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
-
-def send_email(subject, message, to_email):
-    smtp_server = os.environ.get("SMTP_SERVER")
-    smtp_port = int(os.environ.get("SMTP_PORT"))
-    smtp_login = os.environ.get("SMTP_LOGIN")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-
-    email = MarkdownMail(
-        from_addr=smtp_login,
-        to_addr=to_email,
-        subject=subject,
-        content=message
-    )
-    try:
-        email.send(smtp_server, login=smtp_login, password=smtp_password, port=smtp_port)
-        print("Email sent successfully")
-
-    except Exception as e:
-        print("Error sending email:", e)
-
-
 def compress_audio(input_path, output_path):
     """Compress audio file using ffmpeg."""
     try:
@@ -98,7 +78,6 @@ def compress_audio(input_path, output_path):
         logger.error(f"Error compressing audio: {e}")
         return None
 
-
 def transcribe_audio(file_path):
     """Transcribe audio file using OpenAI's Whisper model."""
     try:
@@ -111,7 +90,6 @@ def transcribe_audio(file_path):
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
         return None
-
 
 def generate_report(transcription):
     """Generate a report based on the transcription using GPT-3.5."""
@@ -133,17 +111,14 @@ def generate_report(transcription):
         logger.error(f"Error generating report: {e}")
         return None
 
-
 def send_long_message(chat_id, message):
     """Send long message in chunks."""
     for i in range(0, len(message), 4095):
-        bot.send_message(chat_id, message[i : i + 4095])
-
+        bot.send_message(chat_id, message[i : i + 4095], parse_mode="Markdown")
 
 @bot.message_handler(content_types=["document", "audio", "voice"])
 def handle_files(message):
     """Handle audio files sent as documents or directly."""
-
     if message.content_type == "document":
         document = message.document
         if document.mime_type.startswith("audio/"):
@@ -162,7 +137,6 @@ def handle_files(message):
     else:
         bot.reply_to(message, "Unsupported file format.")
 
-
 @celery.task
 def download_and_process(remote_path, local_path, chat_id):
     """Download file from Telegram and process."""
@@ -170,9 +144,7 @@ def download_and_process(remote_path, local_path, chat_id):
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
     with open(local_path, "wb") as new_file:
         new_file.write(downloaded_file)
-
     process_audio.delay(local_path, chat_id)
-
 
 @celery.task
 def process_audio(input_path, chat_id):
@@ -205,7 +177,6 @@ def process_audio(input_path, chat_id):
         if output_path:
             os.remove(output_path)
 
-
 def prompt_for_email_option(chat_id, report):
     """Prompt the user for email options."""
     report_id = str(uuid.uuid4())
@@ -214,14 +185,12 @@ def prompt_for_email_option(chat_id, report):
     redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Send Immediately", callback_data=f"send_immediately:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Custom Subject", callback_data=f"custom_subject:{report_id}"))
-    bot.send_message(chat_id, "Do you want to send the email immediately or provide a custom subject?", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton("Mail Report", callback_data=f"mail_report:{report_id}"))
+    bot.send_message(chat_id, "The report has been generated. You can mail it by clicking the button below:", reply_markup=markup)
 
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("send_immediately") or call.data.startswith("custom_subject"))
-def handle_email_option(call):
-    """Handle email option selection."""
+@bot.callback_query_handler(func=lambda call: call.data.startswith("mail_report"))
+def handle_mail_report(call):
+    """Handle the 'Mail Report' button click."""
     redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     action, report_id = call.data.split(":", 1)
     report = redis_client.get(report_id)
@@ -230,48 +199,27 @@ def handle_email_option(call):
         bot.send_message(call.message.chat.id, "Report not found.")
         return
 
-    if action == "send_immediately":
-        if TO_EMAIL:
-            current_datetime = datetime.datetime.now(tz=pytz.utc)
-            formatted_date = current_datetime.strftime("%d/%m/%Y")
-            formatted_time = current_datetime.strftime("%I:%M %p")
-
-            subject = f"NOTES {formatted_date}"
-            
-            for email in TO_EMAIL:
-                send_email(subject, report, email)
-        
-        redis_client.delete(report_id)
-        redis_client.close()
-        bot.send_message(call.message.chat.id, "Email sent successfully.")
-
-    elif action == "custom_subject":
-        bot.send_message(call.message.chat.id, "Please provide the custom subject for the email:")
-        redis_client.close()
-        bot.register_next_step_handler(call.message, get_custom_subject, report_id)
-
-
-def get_custom_subject(message, report_id):
-    """Get the custom subject from the user and send the email."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     current_datetime = datetime.datetime.now(tz=pytz.utc)
     formatted_date = current_datetime.strftime("%d/%m/%Y")
-    subject = f"{message.text} {formatted_date}"
-    report = redis_client.get(report_id)
+    subject = f"Notes {formatted_date}"
+    body = report.rstrip().replace("\n", "%0D%0A").replace(" ", "+")
+    to_email = ",".join(TO_EMAIL)
+    
+    mailto_link = f"mailto:{to_email}?subject={urllib.parse.quote(subject)}&body={body}"
+    print(mailto_link[:2000])  
 
-    if not report:
-        bot.send_message(message.chat.id, "Report not found.")
-        redis_client.close()
-        return
-
-    if TO_EMAIL:
-        for email in TO_EMAIL:
-            send_email(subject, report, email)
+    try:
+        shortener = pyshorteners.Shortener()
+        tinyurl_link = shortener.tinyurl.short(mailto_link[:2000])
+        
+        # bot.send_message(call.message.chat.id, f"Click {tinyurl_link} to open your email client, or copy and paste the link below:\n\n{tinyurl_link}")
+        bot.send_message(call.message.chat.id, text=f"Click <a href='{tinyurl_link}'>here</a> to open your email client", parse_mode=ParseMode.HTML)
+    except Exception as e:
+        bot.send_message(call.message.chat.id, "Failed to shorten the URL. Please try again later.")
+        logger.error(f"Error shortening URL: {e}")
     
     redis_client.delete(report_id)
-    bot.send_message(message.chat.id, "Email sent successfully.")
     redis_client.close()
-
 
 @bot.message_handler(commands=["start", "restart"])
 def start(message):
@@ -280,7 +228,6 @@ def start(message):
         "Hi! Send me an audio file and I will generate a written SOAP note in English."
     )
     bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
-
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
