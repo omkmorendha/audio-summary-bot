@@ -51,9 +51,10 @@ def send_email(subject, message, to_email):
     smtp_port = int(os.environ.get("SMTP_PORT"))
     smtp_login = os.environ.get("SMTP_LOGIN")
     smtp_password = os.environ.get("SMTP_PASSWORD")
+    from_email = os.environ.get("FROM_EMAIL")
 
     email = MarkdownMail(
-        from_addr=smtp_login,
+        from_addr=from_email,
         to_addr=to_email,
         subject=subject,
         content=message
