@@ -237,7 +237,7 @@ def prompt_for_email_option(chat_id, report):
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(f"Edit Subject (Default is 'Notes {formatted_date}')", callback_data=f"edit_subject:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Edit Message", callback_data=f"edit_message:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Edit Body", callback_data=f"edit_message:{report_id}"))
     markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
     
     bot.send_message(chat_id, "Report ready. You can edit the subject and message, or send the email directly.", reply_markup=markup)
@@ -323,13 +323,13 @@ def display_report(chat_id, report_id):
 Subject: 
 {subject}
     
-Report:
+Body:
 {message}
     """
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("Edit Subject", callback_data=f"edit_subject:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Edit Message", callback_data=f"edit_message:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Edit Body", callback_data=f"edit_message:{report_id}"))
     markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
 
     bot.send_message(chat_id, response, reply_markup=markup)
