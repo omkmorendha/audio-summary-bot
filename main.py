@@ -53,8 +53,11 @@ def send_email(subject, message, to_email):
     smtp_password = os.environ.get("SMTP_PASSWORD")
     from_email = os.environ.get("FROM_EMAIL")
 
+    from_name = "SOAP Bot"
+    from_addr = f"{from_name} <{from_email}>"
+
     email = MarkdownMail(
-        from_addr=from_email,
+        from_addr=from_addr,
         to_addr=to_email,
         subject=subject,
         content=message
@@ -120,13 +123,32 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. Strictly replace the Client's name with the word CLIENT for privacy. Based on the following transcription:\n\n{transcription}"
+        prompt = f"""
+        1. Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. 
+        2. Strictly replace the Client's name with the word CLIENT for privacy. 
+        
+        3. The format should be like this and do not add any additional formatting or text:
+        # SOAP NOTE
+        
+        ## Subjective:
+
+        ## Objective:
+
+        ## Assessment:
+
+        ## Plan:
+
+        4. Do not hallucinate or make any assumptions other than the one provided in the transcription
+
+        Based on the following transcription:\n\n{transcription}
+        """
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt},
             ],
+            temperature=0.2,
         )
         report = response.choices[0].message.content
         return report
