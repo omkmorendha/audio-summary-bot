@@ -38,11 +38,7 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 TO_EMAIL = ast.literal_eval(os.environ.get("TO_EMAIL"))
 
 bot = TeleBot(BOT_TOKEN, threaded=True)
-# bot.remove_webhook()
-# time.sleep(1)
-# bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
 
-# Connect to Redis
 redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 
@@ -81,7 +77,6 @@ def compress_audio(input_path, output_path):
             logger.error(f"No valid audio stream found in {input_path}")
             return None
 
-        # Perform compression
         (
             ffmpeg.input(input_path)
             .output(
@@ -233,67 +228,111 @@ def prompt_for_email_option(chat_id, report):
     """Prompt the user for email options."""
     report_id = str(uuid.uuid4())
     redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    redis_client.set(report_id, report)
+    redis_client.set(f"message:{report_id}", report)
+    
+    current_datetime = datetime.datetime.now(tz=pytz.utc)
+    formatted_date = current_datetime.strftime("%d/%m/%Y")
+    redis_client.set(f"subject:{report_id}", f"Notes {formatted_date}")
     redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Send Immediately", callback_data=f"send_immediately:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Custom Subject", callback_data=f"custom_subject:{report_id}"))
-    bot.send_message(chat_id, "Do you want to send the email immediately or provide a custom subject?", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(f"Edit Subject (Default is 'Notes {formatted_date}')", callback_data=f"edit_subject:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Edit Message", callback_data=f"edit_message:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
+    
+    bot.send_message(chat_id, "Report ready. You can edit the subject and message, or send the email directly.", reply_markup=markup)
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("send_immediately") or call.data.startswith("custom_subject"))
-def handle_email_option(call):
-    """Handle email option selection."""
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_subject"))
+def handle_edit_subject(call):
+    """Handle subject editing."""
+    report_id = call.data.split(":", 1)[1]
+    bot.send_message(call.message.chat.id, "Please enter the new subject:")
+    bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_subject, report_id)
+
+
+def save_subject(message, report_id):
+    """Save the new subject."""
     redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    action, report_id = call.data.split(":", 1)
-    report = redis_client.get(report_id)
+    redis_client.set(f"subject:{report_id}", message.text)
+    redis_client.close()
 
-    if not report:
-        bot.send_message(call.message.chat.id, "Report not found.")
-        return
+    display_report(message.chat.id, report_id)
 
-    if action == "send_immediately":
-        if TO_EMAIL:
-            current_datetime = datetime.datetime.now(tz=pytz.utc)
-            formatted_date = current_datetime.strftime("%d/%m/%Y")
-            formatted_time = current_datetime.strftime("%I:%M %p")
 
-            subject = f"NOTES {formatted_date}"
-            
-            for email in TO_EMAIL:
-                send_email(subject, report, email)
+@bot.callback_query_handler(func=lambda call: call.data.startswith("edit_message"))
+def handle_edit_message(call):
+    """Handle message editing."""
+    report_id = call.data.split(":", 1)[1]
+    bot.send_message(call.message.chat.id, "Please enter the new message:")
+    bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_message, report_id)
+
+
+def save_message(message, report_id):
+    """Save the new message."""
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+    redis_client.set(f"message:{report_id}", message.text)
+    redis_client.close()
+
+    display_report(message.chat.id, report_id)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("send_email"))
+def handle_send_email(call):
+    """Handle sending the email."""
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+    report_id = call.data.split(":", 1)[1]
+
+    subject = redis_client.get(f"subject:{report_id}")
+    message = redis_client.get(f"message:{report_id}")
+
+    if not subject:
+        current_datetime = datetime.datetime.now(tz=pytz.utc)
+        formatted_date = current_datetime.strftime("%d/%m/%Y")
         
-        redis_client.delete(report_id)
-        redis_client.close()
-        bot.send_message(call.message.chat.id, "Email sent successfully.")
+        subject = f"Notes {formatted_date}"
 
-    elif action == "custom_subject":
-        bot.send_message(call.message.chat.id, "Please provide the custom subject for the email:")
-        redis_client.close()
-        bot.register_next_step_handler(call.message, get_custom_subject, report_id)
-
-
-def get_custom_subject(message, report_id):
-    """Get the custom subject from the user and send the email."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    current_datetime = datetime.datetime.now(tz=pytz.utc)
-    formatted_date = current_datetime.strftime("%d/%m/%Y")
-    subject = f"{message.text} {formatted_date}"
-    report = redis_client.get(report_id)
-
-    if not report:
-        bot.send_message(message.chat.id, "Report not found.")
+    if not message:
+        bot.send_message(call.message.chat.id, "Report not found.")
         redis_client.close()
         return
 
     if TO_EMAIL:
         for email in TO_EMAIL:
-            send_email(subject, report, email)
+            send_email(subject, message, email)
     
     redis_client.delete(report_id)
-    bot.send_message(message.chat.id, "Email sent successfully.")
+    redis_client.delete(f"subject:{report_id}")
+    redis_client.delete(f"message:{report_id}")
+    bot.send_message(call.message.chat.id, "Email sent successfully.")
     redis_client.close()
+
+
+def display_report(chat_id, report_id):
+    """Display the report with options to edit or send."""
+    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+    subject = redis_client.get(f"subject:{report_id}")
+    message = redis_client.get(f"message:{report_id}")
+
+    redis_client.close()
+
+    subject = subject or "(No Subject)"
+    message = message or "(No Message)"
+
+    response = f"""
+Subject: 
+{subject}
+    
+Report:
+{message}
+    """
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("Edit Subject", callback_data=f"edit_subject:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Edit Message", callback_data=f"edit_message:{report_id}"))
+    markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
+
+    bot.send_message(chat_id, response, reply_markup=markup)
 
 
 @bot.message_handler(commands=["start", "restart"])
@@ -304,6 +343,14 @@ def start(message):
     )
     bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
 
+
+@bot.message_handler(func=lambda message: True)
+def handle_random_message(message):
+    """Handle random text messages."""
+    default_message = (
+        "I'm sorry, I can only process audio files. Please send me an audio file and I will generate a written SOAP note in English."
+    )
+    bot.send_message(message.chat.id, default_message, parse_mode="Markdown")
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
