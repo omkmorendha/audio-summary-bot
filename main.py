@@ -132,9 +132,7 @@ def generate_report(transcription):
         ## Assessment:
 
         ## Plan:
-
-        4. Do not hallucinate or make any assumptions other than the one provided in the transcription
-
+        
         Based on the following transcription:\n\n{transcription}
         """
         response = openai_client.chat.completions.create(
