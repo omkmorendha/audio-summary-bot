@@ -344,13 +344,13 @@ def start(message):
     bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
 
 
-@bot.message_handler(func=lambda message: True)
-def handle_random_message(message):
-    """Handle random text messages."""
-    default_message = (
-        "I'm sorry, I can only process audio files. Please send me an audio file and I will generate a written SOAP note in English."
-    )
-    bot.send_message(message.chat.id, default_message, parse_mode="Markdown")
+# @bot.message_handler(func=lambda message: True)
+# def handle_random_message(message):
+#     """Handle random text messages."""
+#     default_message = (
+#         "I'm sorry, I can only process audio files. Please send me an audio file and I will generate a written SOAP note in English."
+#     )
+#     bot.send_message(message.chat.id, default_message, parse_mode="Markdown")
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
