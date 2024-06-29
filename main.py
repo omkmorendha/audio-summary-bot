@@ -121,8 +121,8 @@ def generate_report(transcription):
         prompt = f"""
         1. Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. 
         2. Strictly replace the Client's name with the word CLIENT for privacy. 
-        
-        3. The format should be like this and do not add any additional formatting or text:
+        3. Refer to the therapist as the "Clinician"
+        4. The format should be like this and do not add any additional formatting or text:
         # SOAP NOTE
         
         ## Subjective:
@@ -141,7 +141,7 @@ def generate_report(transcription):
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.5,
         )
         report = response.choices[0].message.content
         return report
