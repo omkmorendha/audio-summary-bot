@@ -38,6 +38,9 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 TO_EMAIL = ast.literal_eval(os.environ.get("TO_EMAIL"))
 
 bot = TeleBot(BOT_TOKEN, threaded=True)
+# bot.remove_webhook()
+# time.sleep(1)
+# bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
 
 redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
@@ -53,13 +56,12 @@ def send_email(subject, message, to_email):
     from_addr = f"{from_name} <{from_email}>"
 
     email = MarkdownMail(
-        from_addr=from_addr,
-        to_addr=to_email,
-        subject=subject,
-        content=message
+        from_addr=from_addr, to_addr=to_email, subject=subject, content=message
     )
     try:
-        email.send(smtp_server, login=smtp_login, password=smtp_password, port=smtp_port)
+        email.send(
+            smtp_server, login=smtp_login, password=smtp_password, port=smtp_port
+        )
         print("Email sent successfully")
 
     except Exception as e:
@@ -118,30 +120,72 @@ def generate_report(transcription):
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
         )
-        prompt = f"""
-        1. Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. 
-        2. Strictly replace the Client's name with the word CLIENT for privacy. 
-        3. Refer to the therapist as the "Clinician"
-        4. The format should be like this and do not add any additional formatting or text:
-        # SOAP NOTE
-        
-        ## Subjective:
-
-        ## Objective:
-
-        ## Assessment:
-
-        ## Plan:
-        
-        Based on the following transcription:\n\n{transcription}
-        """
         response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-3.5-turbo-0125",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt},
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "1. Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. \n"
+                                '2. Replace the Client\'s name with the word CLIENT for privacy and refer to the therapist as the "Clinician"\n'
+                                "\n"
+                                f"Based on the following transcription:\n {transcription}"
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "\nTherapist: Good morning, Sarah! How are you feeling today?\n"
+                                "\nSarah: Good morning, Ms. Kelly! I'm feeling good.\n"
+                                "\nTherapist: That's great to hear. Are you ready to start our session today?\n"
+                                "\nSarah: Yes, I'm ready.\n"
+                                "\nTherapist: Wonderful. Let's begin with some warm-up exercises. First, let's practice some deep breathing. Take a deep breath in through your nose and then slowly exhale through your mouth. Let's do that three times. Ready?\n"
+                                "\nSarah: (Breathing in and out) One... two... three...\n"
+                                "\nTherapist: Excellent, Sarah. Now, let's move on to some tongue exercises. Stick your tongue out as far as you can, then pull it back in. We'll do this five times. Ready? Go!\n"
+                                "\nSarah: (Sticking tongue out and in) One... two... three... four... five...\n"
+                                '\nTherapist: Great job! Now, let\'s work on some sounds. Repeat after me: "la, la, la."\n'
+                                "\nSarah: La, la, la.\n"
+                                '\nTherapist: Very good. Now, let\'s try "ta, ta, ta."\n'
+                                "\nSarah: Ta, ta, ta.\n"
+                                '\nTherapist: Excellent! Now, let\'s put some of those sounds into words. Can you say "ladder"?\n'
+                                "\nSarah: Ladder.\n"
+                                '\nTherapist: Good job! How about "tiger"?\n'
+                                "\nSarah: Tiger.\n"
+                                "\nTherapist: You're doing great, Sarah. Let's try a sentence now. Repeat after me: \"The ladder is tall.\"\n"
+                                "\nSarah: The ladder is tall.\n"
+                                '\nTherapist: Perfect! Now let\'s try, "The tiger is big."\n'
+                                "\nSarah: The tiger is big.\n"
+                                "\nTherapist: Wonderful! Now, let's play a little game. I'm going to show you some pictures, and I want you to name what you see. Ready?\n"
+                                "\nSarah: Yes, I'm ready.\n"
+                                "\nTherapist: (Shows a picture of a cat) What's this?\n"
+                                "\nSarah: Cat.\n"
+                                "\nTherapist: Very good! (Shows a picture of a car) And this?\n"
+                                "\nSarah: Car.\n"
+                                "\nTherapist: Excellent, Sarah. You're doing so well today. Now, let's practice some sentences using these words. Can you say, \"The cat is sleeping\"?\n"
+                                "\nSarah: The cat is sleeping.\n"
+                                '\nTherapist: Great! Now, "The car is red."\n'
+                                "\nSarah: The car is red.\n"
+                                "\nTherapist: Perfect, Sarah. You've done an amazing job today. Keep practicing these exercises at home, and I'll see you next time.\n"
+                                "\nSarah: Thank you, Ms. Kelly! See you next time.\n"
+                                "\nTherapist: You're welcome, Sarah. Have a great day!\n"
+                            ),
+                        }
+                    ],
+                },
             ],
-            temperature=0.5,
+            temperature=0.7,
+            max_tokens=4010,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0,
         )
         report = response.choices[0].message.content
         return report
@@ -196,7 +240,7 @@ def process_audio(input_path, chat_id):
     output_path = os.path.join(
         "downloads", "compressed_" + os.path.basename(input_path)
     )
-    
+
     try:
         compressed_path = compress_audio(input_path, output_path)
         if compressed_path:
@@ -213,7 +257,7 @@ def process_audio(input_path, chat_id):
         else:
             bot.send_message(chat_id, "Failed to compress audio.")
     except Exception as e:
-        print(f'Unexpected error: {e}')
+        print(f"Unexpected error: {e}")
 
     finally:
         if input_path:
@@ -227,18 +271,35 @@ def prompt_for_email_option(chat_id, report):
     report_id = str(uuid.uuid4())
     redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
     redis_client.set(f"message:{report_id}", report)
-    
+
     current_datetime = datetime.datetime.now(tz=pytz.utc)
     formatted_date = current_datetime.strftime("%d/%m/%Y")
     redis_client.set(f"subject:{report_id}", f"Notes {formatted_date}")
     redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(f"Edit Subject (Default is 'Notes {formatted_date}')", callback_data=f"edit_subject:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Edit Body", callback_data=f"edit_message:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
-    
-    bot.send_message(chat_id, "Report ready. You can edit the subject and message, or send the email directly.", reply_markup=markup)
+    markup.add(
+        types.InlineKeyboardButton(
+            f"Edit Subject (Default is 'Notes {formatted_date}')",
+            callback_data=f"edit_subject:{report_id}",
+        )
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            "Edit Body", callback_data=f"edit_message:{report_id}"
+        )
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            "Send Email", callback_data=f"send_email:{report_id}"
+        )
+    )
+
+    bot.send_message(
+        chat_id,
+        "Report ready. You can edit the subject and message, or send the email directly.",
+        reply_markup=markup,
+    )
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_subject"))
@@ -246,7 +307,9 @@ def handle_edit_subject(call):
     """Handle subject editing."""
     report_id = call.data.split(":", 1)[1]
     bot.send_message(call.message.chat.id, "Please enter the new subject:")
-    bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_subject, report_id)
+    bot.register_next_step_handler_by_chat_id(
+        call.message.chat.id, save_subject, report_id
+    )
 
 
 def save_subject(message, report_id):
@@ -263,7 +326,9 @@ def handle_edit_message(call):
     """Handle message editing."""
     report_id = call.data.split(":", 1)[1]
     bot.send_message(call.message.chat.id, "Please enter the new message:")
-    bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_message, report_id)
+    bot.register_next_step_handler_by_chat_id(
+        call.message.chat.id, save_message, report_id
+    )
 
 
 def save_message(message, report_id):
@@ -287,7 +352,7 @@ def handle_send_email(call):
     if not subject:
         current_datetime = datetime.datetime.now(tz=pytz.utc)
         formatted_date = current_datetime.strftime("%d/%m/%Y")
-        
+
         subject = f"Notes {formatted_date}"
 
     if not message:
@@ -298,7 +363,7 @@ def handle_send_email(call):
     if TO_EMAIL:
         for email in TO_EMAIL:
             send_email(subject, message, email)
-    
+
     redis_client.delete(report_id)
     redis_client.delete(f"subject:{report_id}")
     redis_client.delete(f"message:{report_id}")
@@ -326,9 +391,21 @@ Body:
     """
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("Edit Subject", callback_data=f"edit_subject:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Edit Body", callback_data=f"edit_message:{report_id}"))
-    markup.add(types.InlineKeyboardButton("Send Email", callback_data=f"send_email:{report_id}"))
+    markup.add(
+        types.InlineKeyboardButton(
+            "Edit Subject", callback_data=f"edit_subject:{report_id}"
+        )
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            "Edit Body", callback_data=f"edit_message:{report_id}"
+        )
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            "Send Email", callback_data=f"send_email:{report_id}"
+        )
+    )
 
     bot.send_message(chat_id, response, reply_markup=markup)
 
@@ -349,6 +426,7 @@ def start(message):
 #         "I'm sorry, I can only process audio files. Please send me an audio file and I will generate a written SOAP note in English."
 #     )
 #     bot.send_message(message.chat.id, default_message, parse_mode="Markdown")
+
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
