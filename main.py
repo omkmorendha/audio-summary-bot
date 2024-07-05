@@ -131,7 +131,18 @@ def generate_report(transcription):
                             "text": (
                                 "1. Turn this Parent session summary transcript into a written SOAP note in English in Markdown format. \n"
                                 '2. Replace the Client\'s name with the word CLIENT for privacy and refer to the therapist as the "Clinician"\n'
-                                "\n"
+                                "3. Respond in the following format: \n"
+                                """
+                                # SOAP NOTE
+                                ## Subjective:
+                                Subjective here
+                                ## Objective:
+                                Objective here
+                                ## Assessment:
+                                Assessment here
+                                ## Plan:
+                                Plan here
+                                """
                                 f"Based on the following transcription:\n {transcription}"
                             ),
                         }
