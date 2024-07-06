@@ -143,7 +143,6 @@ def generate_report(transcription):
                                 ## Plan:
                                 Plan here
                                 """
-                                f"Based on the following transcription:\n {transcription}"
                             ),
                         }
                     ],
@@ -153,41 +152,7 @@ def generate_report(transcription):
                     "content": [
                         {
                             "type": "text",
-                            "text": (
-                                "\nTherapist: Good morning, Sarah! How are you feeling today?\n"
-                                "\nSarah: Good morning, Ms. Kelly! I'm feeling good.\n"
-                                "\nTherapist: That's great to hear. Are you ready to start our session today?\n"
-                                "\nSarah: Yes, I'm ready.\n"
-                                "\nTherapist: Wonderful. Let's begin with some warm-up exercises. First, let's practice some deep breathing. Take a deep breath in through your nose and then slowly exhale through your mouth. Let's do that three times. Ready?\n"
-                                "\nSarah: (Breathing in and out) One... two... three...\n"
-                                "\nTherapist: Excellent, Sarah. Now, let's move on to some tongue exercises. Stick your tongue out as far as you can, then pull it back in. We'll do this five times. Ready? Go!\n"
-                                "\nSarah: (Sticking tongue out and in) One... two... three... four... five...\n"
-                                '\nTherapist: Great job! Now, let\'s work on some sounds. Repeat after me: "la, la, la."\n'
-                                "\nSarah: La, la, la.\n"
-                                '\nTherapist: Very good. Now, let\'s try "ta, ta, ta."\n'
-                                "\nSarah: Ta, ta, ta.\n"
-                                '\nTherapist: Excellent! Now, let\'s put some of those sounds into words. Can you say "ladder"?\n'
-                                "\nSarah: Ladder.\n"
-                                '\nTherapist: Good job! How about "tiger"?\n'
-                                "\nSarah: Tiger.\n"
-                                "\nTherapist: You're doing great, Sarah. Let's try a sentence now. Repeat after me: \"The ladder is tall.\"\n"
-                                "\nSarah: The ladder is tall.\n"
-                                '\nTherapist: Perfect! Now let\'s try, "The tiger is big."\n'
-                                "\nSarah: The tiger is big.\n"
-                                "\nTherapist: Wonderful! Now, let's play a little game. I'm going to show you some pictures, and I want you to name what you see. Ready?\n"
-                                "\nSarah: Yes, I'm ready.\n"
-                                "\nTherapist: (Shows a picture of a cat) What's this?\n"
-                                "\nSarah: Cat.\n"
-                                "\nTherapist: Very good! (Shows a picture of a car) And this?\n"
-                                "\nSarah: Car.\n"
-                                "\nTherapist: Excellent, Sarah. You're doing so well today. Now, let's practice some sentences using these words. Can you say, \"The cat is sleeping\"?\n"
-                                "\nSarah: The cat is sleeping.\n"
-                                '\nTherapist: Great! Now, "The car is red."\n'
-                                "\nSarah: The car is red.\n"
-                                "\nTherapist: Perfect, Sarah. You've done an amazing job today. Keep practicing these exercises at home, and I'll see you next time.\n"
-                                "\nSarah: Thank you, Ms. Kelly! See you next time.\n"
-                                "\nTherapist: You're welcome, Sarah. Have a great day!\n"
-                            ),
+                            "text": transcription
                         }
                     ],
                 },
