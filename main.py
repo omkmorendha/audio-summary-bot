@@ -323,8 +323,8 @@ def handle_send_email(call):
     redis_client = Redis(connection_pool=pool)
     report_id = call.data.split(":", 1)[1]
 
-    subject = redis_client.get(f"subject:{report_id}")
-    message = redis_client.get(f"message:{report_id}")
+    subject = redis_client.get(f"subject:{report_id}").decode("utf-8")
+    message = redis_client.get(f"message:{report_id}").decode("utf-8")
 
     if not subject:
         current_datetime = datetime.datetime.now(tz=pytz.utc)
@@ -351,8 +351,8 @@ def handle_send_email(call):
 def display_report(chat_id, report_id):
     """Display the report with options to edit or send."""
     redis_client = Redis(connection_pool=pool)
-    subject = redis_client.get(f"subject:{report_id}")
-    message = redis_client.get(f"message:{report_id}")
+    subject = redis_client.get(f"subject:{report_id}").decode("utf-8")
+    message = redis_client.get(f"message:{report_id}").decode("utf-8")
 
     redis_client.close()
 
