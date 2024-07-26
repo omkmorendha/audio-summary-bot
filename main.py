@@ -13,7 +13,7 @@ import pytz
 import ast
 from markdownmail import MarkdownMail
 import uuid
-import redis
+from redis import Redis, ConnectionPool
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -24,9 +24,9 @@ app = Flask(__name__)
 app.config["CELERY_BROKER_URL"] = os.environ.get(
     "REDIS_URL", "redis://localhost:6379/0"
 )
-app.config["CELERY_RESULT_BACKEND"] = os.environ.get(
-    "REDIS_URL", "redis://localhost:6379/0"
-)
+
+redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+pool = ConnectionPool.from_url(redis_url)
 
 celery = Celery(app.name, broker=app.config["CELERY_BROKER_URL"])
 celery.conf.update(app.config)
@@ -246,12 +246,12 @@ def process_audio(input_path, chat_id):
 def prompt_for_email_option(chat_id, report):
     """Prompt the user for email options."""
     report_id = str(uuid.uuid4())
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    redis_client.set(f"message:{report_id}", report)
+    redis_client = Redis(connection_pool=pool)
+    redis_client.set(f"message:{report_id}", report, ex=6*60*60)
 
     current_datetime = datetime.datetime.now(tz=pytz.utc)
     formatted_date = current_datetime.strftime("%d/%m/%Y")
-    redis_client.set(f"subject:{report_id}", f"Notes {formatted_date}")
+    redis_client.set(f"subject:{report_id}", f"Notes {formatted_date}", ex=6*60*60)
     redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
@@ -291,8 +291,8 @@ def handle_edit_subject(call):
 
 def save_subject(message, report_id):
     """Save the new subject."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    redis_client.set(f"subject:{report_id}", message.text)
+    redis_client = Redis(connection_pool=pool)
+    redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
     redis_client.close()
 
     display_report(message.chat.id, report_id)
@@ -310,8 +310,8 @@ def handle_edit_message(call):
 
 def save_message(message, report_id):
     """Save the new message."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-    redis_client.set(f"message:{report_id}", message.text)
+    redis_client = Redis(connection_pool=pool)
+    redis_client.set(f"message:{report_id}", message.text, ex=6*60*60)
     redis_client.close()
 
     display_report(message.chat.id, report_id)
@@ -320,7 +320,7 @@ def save_message(message, report_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("send_email"))
 def handle_send_email(call):
     """Handle sending the email."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+    redis_client = Redis(connection_pool=pool)
     report_id = call.data.split(":", 1)[1]
 
     subject = redis_client.get(f"subject:{report_id}")
@@ -350,7 +350,7 @@ def handle_send_email(call):
 
 def display_report(chat_id, report_id):
     """Display the report with options to edit or send."""
-    redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+    redis_client = Redis(connection_pool=pool)
     subject = redis_client.get(f"subject:{report_id}")
     message = redis_client.get(f"message:{report_id}")
 
