@@ -286,6 +286,7 @@ def handle_edit_subject(call):
     """Handle subject editing."""
     report_id = call.data.split(":", 1)[1]
     bot.send_message(call.message.chat.id, "Please enter the new subject:")
+    logger.info(f"Waiting for new subject for report_id: {report_id}")
     bot.register_next_step_handler_by_chat_id(
         call.message.chat.id, save_subject, report_id
     )
@@ -293,6 +294,7 @@ def handle_edit_subject(call):
 
 def save_subject(message, report_id):
     """Save the new subject."""
+    logger.info(f"Received new subject: {message.text} for report_id: {report_id}")
     redis_client = Redis(connection_pool=pool)
     redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
     logger.info(f"Saved new subject: {message.text} for report_id: {report_id}")
