@@ -295,6 +295,7 @@ def save_subject(message, report_id):
     """Save the new subject."""
     redis_client = Redis(connection_pool=pool)
     redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
+    logger.info(f"Saved new subject: {message.text} for report_id: {report_id}")
     redis_client.close()
 
     display_report(message.chat.id, report_id)
@@ -314,6 +315,7 @@ def save_message(message, report_id):
     """Save the new message."""
     redis_client = Redis(connection_pool=pool)
     redis_client.set(f"message:{report_id}", message.text, ex=6*60*60)
+    logger.info(f"Saved new message for report_id: {report_id}")
     redis_client.close()
 
     display_report(message.chat.id, report_id)
@@ -325,16 +327,20 @@ def handle_send_email(call):
     redis_client = Redis(connection_pool=pool)
     report_id = call.data.split(":", 1)[1]
 
-    subject = redis_client.get(f"subject:{report_id}").decode("utf-8")
-    message = redis_client.get(f"message:{report_id}").decode("utf-8")
+    subject = redis_client.get(f"subject:{report_id}")
+    message = redis_client.get(f"message:{report_id}")
 
-    if not subject:
+    if subject:
+        subject = subject.decode("utf-8")
+    else:
         current_datetime = datetime.datetime.now(tz=pytz.utc)
         formatted_date = current_datetime.strftime("%d/%m/%Y")
 
         subject = f"Notes {formatted_date}"
 
-    if not message:
+    if message:
+        message = message.decode("utf-8")
+    else:
         bot.send_message(call.message.chat.id, "Report not found.")
         redis_client.close()
         return
@@ -353,13 +359,20 @@ def handle_send_email(call):
 def display_report(chat_id, report_id):
     """Display the report with options to edit or send."""
     redis_client = Redis(connection_pool=pool)
-    subject = redis_client.get(f"subject:{report_id}").decode("utf-8")
-    message = redis_client.get(f"message:{report_id}").decode("utf-8")
+    subject = redis_client.get(f"subject:{report_id}")
+    message = redis_client.get(f"message:{report_id}")
+
+    if subject:
+        subject = subject.decode("utf-8")
+    else:
+        subject = "(No Subject)"
+
+    if message:
+        message = message.decode("utf-8")
+    else:
+        message = "(No Message)"
 
     redis_client.close()
-
-    subject = subject or "(No Subject)"
-    message = message or "(No Message)"
 
     response = f"""
 Subject: 
