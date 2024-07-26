@@ -271,6 +271,7 @@ def prompt_for_email_option(chat_id, report):
             "Send Email", callback_data=f"send_email:{report_id}"
         )
     )
+    print(f"edit_subject:{report_id} edit_message:{report_id} send_email:{report_id}")
 
     bot.send_message(
         chat_id,
