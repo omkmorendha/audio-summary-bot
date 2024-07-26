@@ -293,20 +293,22 @@ def handle_edit_subject(call):
 
 
 def save_subject_with_logging(message, report_id):
-    """Save the new subject with logging."""
-    logger.info(f"Received new subject message: {message}")
+    """Wrapper to save the new subject with logging."""
+    logger.info(f"Received new subject message: chat_id={message.chat.id}, report_id={report_id}, text={message.text}")
     save_subject(message, report_id)
 
 
 def save_subject(message, report_id):
     """Save the new subject."""
-    logger.info(f"Received new subject: {message.text} for report_id: {report_id}")
-    redis_client = Redis(connection_pool=pool)
-    redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
-    logger.info(f"Saved new subject: {message.text} for report_id: {report_id}")
-    redis_client.close()
-
-    display_report(message.chat.id, report_id)
+    logger.info(f"Saving new subject: {message.text} for report_id: {report_id}")
+    try:
+        redis_client = Redis(connection_pool=pool)
+        redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
+        logger.info(f"Saved new subject: {message.text} for report_id: {report_id}")
+        redis_client.close()
+        display_report(message.chat.id, report_id)
+    except Exception as e:
+        logger.error(f"Error saving subject to Redis: {e}")
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_message"))
