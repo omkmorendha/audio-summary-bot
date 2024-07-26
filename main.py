@@ -284,12 +284,15 @@ def prompt_for_email_option(chat_id, report):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_subject"))
 def handle_edit_subject(call):
     """Handle subject editing."""
-    report_id = call.data.split(":", 1)[1]
-    bot.send_message(call.message.chat.id, "Please enter the new subject:")
-    logger.info(f"Waiting for new subject for report_id: {report_id}")
-    bot.register_next_step_handler_by_chat_id(
-        call.message.chat.id, save_subject_with_logging, report_id
-    )
+    try:
+        report_id = call.data.split(":", 1)[1]
+        bot.send_message(call.message.chat.id, "Please enter the new subject:")
+        logger.info(f"Waiting for new subject for report_id: {report_id}")
+        bot.register_next_step_handler_by_chat_id(
+            call.message.chat.id, save_subject_with_logging, report_id
+        )
+    except Exception as e:
+        logger.error(f"Error editing subject to Redis: {e}")
 
 
 def save_subject_with_logging(message, report_id):
