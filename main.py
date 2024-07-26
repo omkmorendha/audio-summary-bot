@@ -27,6 +27,7 @@ app.config["CELERY_BROKER_URL"] = os.environ.get(
 
 redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 pool = ConnectionPool.from_url(redis_url)
+redis_client = Redis(connection_pool=pool)
 
 celery = Celery(app.name, broker=app.config["CELERY_BROKER_URL"])
 celery.conf.update(app.config)
@@ -38,12 +39,6 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 TO_EMAIL = ast.literal_eval(os.environ.get("TO_EMAIL"))
 
 bot = TeleBot(BOT_TOKEN, threaded=True)
-# bot.remove_webhook()
-# time.sleep(1)
-# bot.set_webhook(url=f"{URL}/{WEBHOOK_SECRET}")
-
-redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-
 
 def send_email(subject, message, to_email):
     smtp_server = os.environ.get("SMTP_SERVER")
@@ -63,10 +58,8 @@ def send_email(subject, message, to_email):
             smtp_server, login=smtp_login, password=smtp_password, port=smtp_port
         )
         print("Email sent successfully")
-
     except Exception as e:
         print("Error sending email:", e)
-
 
 def compress_audio(input_path, output_path):
     """Compress audio file using ffmpeg."""
@@ -99,7 +92,6 @@ def compress_audio(input_path, output_path):
         logger.error(f"Error compressing audio: {e}")
         return None
 
-
 def transcribe_audio(file_path):
     """Transcribe audio file using OpenAI's Whisper model."""
     try:
@@ -112,7 +104,6 @@ def transcribe_audio(file_path):
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
         return None
-
 
 def generate_report(transcription):
     """Generate a report based on the transcription using GPT-3.5."""
@@ -170,17 +161,14 @@ def generate_report(transcription):
         logger.error(f"Error generating report: {e}")
         return None
 
-
 def send_long_message(chat_id, message):
     """Send long message in chunks."""
     for i in range(0, len(message), 4095):
         bot.send_message(chat_id, message[i : i + 4095])
 
-
 @bot.message_handler(content_types=["document", "audio", "voice"])
 def handle_files(message):
     """Handle audio files sent as documents or directly."""
-
     if message.content_type == "document":
         document = message.document
         if document.mime_type.startswith("audio/"):
@@ -199,7 +187,6 @@ def handle_files(message):
     else:
         bot.reply_to(message, "Unsupported file format.")
 
-
 @celery.task
 def download_and_process(remote_path, local_path, chat_id):
     """Download file from Telegram and process."""
@@ -209,7 +196,6 @@ def download_and_process(remote_path, local_path, chat_id):
         new_file.write(downloaded_file)
 
     process_audio.delay(local_path, chat_id)
-
 
 @celery.task
 def process_audio(input_path, chat_id):
@@ -242,17 +228,14 @@ def process_audio(input_path, chat_id):
         if output_path:
             os.remove(output_path)
 
-
 def prompt_for_email_option(chat_id, report):
     """Prompt the user for email options."""
     report_id = str(uuid.uuid4())
-    redis_client = Redis(connection_pool=pool)
     redis_client.set(f"message:{report_id}", report, ex=6*60*60)
 
     current_datetime = datetime.datetime.now(tz=pytz.utc)
     formatted_date = current_datetime.strftime("%d/%m/%Y")
     redis_client.set(f"subject:{report_id}", f"Notes {formatted_date}", ex=6*60*60)
-    redis_client.close()
 
     markup = types.InlineKeyboardMarkup()
     markup.add(
@@ -280,7 +263,6 @@ def prompt_for_email_option(chat_id, report):
         reply_markup=markup,
     )
 
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_subject"))
 def handle_edit_subject(call):
     """Handle subject editing."""
@@ -294,25 +276,20 @@ def handle_edit_subject(call):
     except Exception as e:
         logger.error(f"Error editing subject to Redis: {e}")
 
-
 def save_subject_with_logging(message, report_id):
     """Wrapper to save the new subject with logging."""
     logger.info(f"Received new subject message: chat_id={message.chat.id}, report_id={report_id}, text={message.text}")
     save_subject(message, report_id)
 
-
 def save_subject(message, report_id):
     """Save the new subject."""
     logger.info(f"Saving new subject: {message.text} for report_id: {report_id}")
     try:
-        redis_client = Redis(connection_pool=pool)
         redis_client.set(f"subject:{report_id}", message.text, ex=6*60*60)
         logger.info(f"Saved new subject: {message.text} for report_id: {report_id}")
-        redis_client.close()
         display_report(message.chat.id, report_id)
     except Exception as e:
         logger.error(f"Error saving subject to Redis: {e}")
-
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_message"))
 def handle_edit_message(call):
@@ -323,21 +300,15 @@ def handle_edit_message(call):
         call.message.chat.id, save_message, report_id
     )
 
-
 def save_message(message, report_id):
     """Save the new message."""
-    redis_client = Redis(connection_pool=pool)
     redis_client.set(f"message:{report_id}", message.text, ex=6*60*60)
     logger.info(f"Saved new message for report_id: {report_id}")
-    redis_client.close()
-
     display_report(message.chat.id, report_id)
-
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("send_email"))
 def handle_send_email(call):
     """Handle sending the email."""
-    redis_client = Redis(connection_pool=pool)
     report_id = call.data.split(":", 1)[1]
 
     subject = redis_client.get(f"subject:{report_id}")
@@ -348,30 +319,24 @@ def handle_send_email(call):
     else:
         current_datetime = datetime.datetime.now(tz=pytz.utc)
         formatted_date = current_datetime.strftime("%d/%m/%Y")
-
         subject = f"Notes {formatted_date}"
 
     if message:
         message = message.decode("utf-8")
     else:
         bot.send_message(call.message.chat.id, "Report not found.")
-        redis_client.close()
         return
 
     if TO_EMAIL:
         for email in TO_EMAIL:
             send_email(subject, message, email)
 
-    redis_client.delete(report_id)
-    redis_client.delete(f"subject:{report_id}")
     redis_client.delete(f"message:{report_id}")
+    redis_client.delete(f"subject:{report_id}")
     bot.send_message(call.message.chat.id, "Email sent successfully.")
-    redis_client.close()
-
 
 def display_report(chat_id, report_id):
     """Display the report with options to edit or send."""
-    redis_client = Redis(connection_pool=pool)
     subject = redis_client.get(f"subject:{report_id}")
     message = redis_client.get(f"message:{report_id}")
 
@@ -384,8 +349,6 @@ def display_report(chat_id, report_id):
         message = message.decode("utf-8")
     else:
         message = "(No Message)"
-
-    redis_client.close()
 
     response = f"""
 Subject: 
@@ -414,7 +377,6 @@ Body:
 
     bot.send_message(chat_id, response, reply_markup=markup)
 
-
 @bot.message_handler(commands=["start", "restart"])
 def start(message):
     """Handle /start and /restart commands."""
@@ -422,16 +384,6 @@ def start(message):
         "Hi! Send me an audio file and I will generate a written SOAP note in English."
     )
     bot.send_message(message.chat.id, message_to_send, parse_mode="Markdown")
-
-
-# @bot.message_handler(func=lambda message: True)
-# def handle_random_message(message):
-#     """Handle random text messages."""
-#     default_message = (
-#         "I'm sorry, I can only process audio files. Please send me an audio file and I will generate a written SOAP note in English."
-#     )
-#     bot.send_message(message.chat.id, default_message, parse_mode="Markdown")
-
 
 @app.route(f"/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
