@@ -288,8 +288,14 @@ def handle_edit_subject(call):
     bot.send_message(call.message.chat.id, "Please enter the new subject:")
     logger.info(f"Waiting for new subject for report_id: {report_id}")
     bot.register_next_step_handler_by_chat_id(
-        call.message.chat.id, save_subject, report_id
+        call.message.chat.id, save_subject_with_logging, report_id
     )
+
+
+def save_subject_with_logging(message, report_id):
+    """Save the new subject with logging."""
+    logger.info(f"Received new subject message: {message}")
+    save_subject(message, report_id)
 
 
 def save_subject(message, report_id):
